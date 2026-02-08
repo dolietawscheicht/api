@@ -1,0 +1,31 @@
+{
+	"name": "api",
+	"module": "src/index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"run:dev": "bun --watch src/index.ts",
+		"db:push": "prisma db push && prisma generate",
+		"db:studio": "prisma studio"
+	},
+	"devDependencies": {
+		"@dotenvx/dotenvx": "^1.52.0",
+		"@react-email/components": "^1.0.7",
+		"@types/bun": "latest",
+		"@types/nodemailer": "^7.0.9",
+		"@types/react": "^19.2.13",
+		"@types/react-dom": "^19.2.3",
+		"prisma": "^7.3.0"
+	},
+	"dependencies": {
+		"@elysiajs/cors": "^1.4.1",
+		"@prisma/adapter-pg": "^7.3.0",
+		"@prisma/client": "^7.3.0",
+		"elysia": "^1.4.22",
+		"nodemailer": "^8.0.1",
+		"reflect-metadata": "^0.2.2",
+		"tsyringe": "^4.10.0",
+		"typescript": "^5",
+		"valibot": "^1.2.0"
+	}
+}

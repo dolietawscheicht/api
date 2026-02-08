@@ -1,0 +1,56 @@
+services:
+  database:
+    image: postgres
+    container_name: ${DATABASE_CONNECTION}
+    restart: unless-stopped
+    ports:
+      - "${DATABASE_PORT}:5432"
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - database_data:/var/lib/postgresql
+
+  cache:
+    image: redis
+    container_name: ${CACHE_CONNECTION}
+    restart: unless-stopped
+    ports:
+      - "${CACHE_PORT}:6379"
+    volumes:
+      - cache_data:/data
+    command: redis-server --requirepass ${CACHE_PASSWORD}
+
+  s3:
+    image: minio/minio
+    container_name: ${S3_CONNECTION}
+    restart: unless-stopped
+    ports:
+      - "${S3_PORT}:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - s3_data:/data
+    command: server /data --console-address ":9001"
+
+  mail:
+    image: axllent/mailpit
+    container_name: ${MAIL_CONNECTION}
+    restart: unless-stopped
+    ports:
+      - "${MAIL_PORT}:1025"
+      - "8025:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    volumes:
+      - mail_data:/data
+
+volumes:
+  database_data:
+  cache_data:
+  s3_data:
+  mail_data:
