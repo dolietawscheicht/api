@@ -15,15 +15,15 @@ export class Strings {
 		});
 	}
 
-	compare(a: string, b: string) {
+	compare(a: string, b: string): boolean {
 		return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 	}
 
-	hash(plain: string): Promise<string> {
-		return Bun.password.hash(plain);
+	async hash(plain: string): Promise<string> {
+		return await Bun.password.hash(plain);
 	}
 
-	verifyHash(plain: string, hash: string): Promise<boolean> {
-		return Bun.password.verify(plain, hash);
+	async verifyHash(plain: string, hash: string): Promise<boolean> {
+		return await Bun.password.verify(plain, hash);
 	}
 }

@@ -1,4 +1,3 @@
-import { Sessions } from "@/facades/sessions";
 import { session } from "@/framework/macros/session";
 import { Elysia } from "elysia";
 import { container } from "tsyringe";
@@ -8,20 +7,22 @@ import { Auth } from "./service";
 export const authController = new Elysia({ prefix: "auth" })
 	.use(session)
 	.use(authModel)
-	.decorate("$sessions", container.resolve(Sessions))
+
 	.decorate("$auth", container.resolve(Auth))
+
 	.post(
 		"/signup",
 		async ({ $auth, body }) => {
-			await $auth.signup(body.email, body.password);
-			return "Код отправлен на вашу эл.почту";
+			await $auth.register(body.email, body.password);
+			return "Код для завершения регистрации отправлен на вашу эл.почту";
 		},
 		{ body: "signup" },
 	)
+
 	.post(
 		"/login",
 		async ({ $auth, body }) => {
-			const { password, ...user } = await $auth.login(
+			const { password, ...user } = await $auth.authenticate(
 				body.email,
 				body.password,
 			);
@@ -29,48 +30,52 @@ export const authController = new Elysia({ prefix: "auth" })
 		},
 		{ body: "login", initializeSession: true, response: "sessionUser" },
 	)
+
 	.post(
-		"/otp/send",
+		"/login/code/initiate",
 		async ({ $auth, body }) => {
-			await $auth.sendOtp(body.email);
-			return "Код отправлен на вашу эл.почту";
+			await $auth.initiateCodeAuthenticate(body.email);
+			return "Код для вход отправлен на вашу эл.почту";
 		},
-		{ body: "sendOtp" },
+		{ body: "loginCodeInitiate" },
 	)
+
 	.post(
-		"/otp/verify",
+		"/login/code/complete",
 		async ({ $auth, body }) => {
-			const { password, ...user } = await $auth.verifyOtp(body.otp, body.email);
+			const { password, ...user } = await $auth.completeCodeAuthenticate(
+				body.code,
+				body.email,
+			);
 			return user;
 		},
-		{ body: "verifyOtp", initializeSession: true, response: "sessionUser" },
+		{
+			body: "loginCodeComplete",
+			initializeSession: true,
+			response: "sessionUser",
+		},
 	)
-	.patch(
-		"/password",
+
+	.post(
+		"/reset/initiate",
 		async ({ $auth, body }) => {
-			await $auth.changePassword(body.otp, body.email, body.newPassword);
+			await $auth.initiateReset(body.email);
+			return "Код для сброса пароля отправлен на вашу эл.почту";
+		},
+		{ body: "resetInitiate" },
+	)
+
+	.post(
+		"/reset/complete",
+		async ({ $auth, body }) => {
+			await $auth.completeReset(body.code, body.email, body.newPassword);
 			return "Пароль успешно изменен";
 		},
-		{ body: "changePassword" },
+		{ body: "resetComplete" },
 	)
-	.post(
-		"/logout",
-		({ $sessions, session }) => {
-			return $sessions.destroy(session.id);
-		},
-		{ provideSession: true },
-	)
-	.post(
-		"/logout/all",
-		({ $sessions, session }) => {
-			return $sessions.destroyAll(session.userId);
-		},
-		{ provideSession: true },
-	)
-	.get(
-		"/sessions",
-		({ $sessions, session }) => {
-			return $sessions.getAll(session.userId);
-		},
-		{ provideSession: true },
-	);
+
+	.post("/sessions/current/logout", () => true, { withLogout: true })
+
+	.post("/sessions/all/logout", () => true, { withFullLogout: true })
+
+	.get("/sessions", ({ sessions }) => sessions, { withSessions: true });

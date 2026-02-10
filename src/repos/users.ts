@@ -19,7 +19,7 @@ export class Users {
 		return await prisma.user.create({ data });
 	}
 
-	async findWhere(
+	async find(
 		where: AtLeastOne<Pick<User, "id" | "email" | "name">>,
 	): Promise<User | null> {
 		return await prisma.user.findUnique({ where });

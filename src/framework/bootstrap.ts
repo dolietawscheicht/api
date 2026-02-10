@@ -1,4 +1,4 @@
-import { Config } from "@/facades/config";
+import { Config } from "@/adapters/config";
 import { Exception } from "@/general/exception";
 import { authController } from "@/modules/auth/controller";
 import { usersController } from "@/modules/users/controller";
@@ -12,6 +12,8 @@ export const bootstrap = () => {
 	new Elysia()
 		.error({ Exception })
 		.onError(({ error, code, status }) => {
+			console.log(error);
+
 			let message = "Произошла ошибка";
 			let statusCode: keyof StatusMap = "Internal Server Error";
 			let errors: Record<string, string[]> | undefined;

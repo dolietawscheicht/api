@@ -1,28 +1,30 @@
-import { Assets } from "@/facades/assets";
-import { Cache } from "@/facades/cache";
-import { Config } from "@/facades/config";
-import { Notifier } from "@/facades/notifier";
+import { Cache } from "@/adapters/cache";
+import { Config } from "@/adapters/config";
+import { Notifier } from "@/adapters/notifier";
 import { Exception } from "@/general/exception";
 import { type User, Users } from "@/repos/users";
 import { Strings } from "@/utils/strings";
+import { Time } from "@/utils/time";
 import { inject, singleton } from "tsyringe";
+
+enum CodePurpose {
+	Authenticate = "Authenticate",
+	Reset = "reset",
+}
 
 @singleton()
 export class Auth {
 	constructor(
+		@inject(Time) private time: Time,
 		@inject(Users) private users: Users,
 		@inject(Cache) private cache: Cache,
 		@inject(Config) private config: Config,
-		@inject(Assets) private assets: Assets,
 		@inject(Strings) private strings: Strings,
 		@inject(Notifier) private notifier: Notifier,
 	) {}
 
-	async signup(
-		email: User["email"],
-		password: User["password"],
-	): Promise<void> {
-		let user = await this.users.findWhere({ email });
+	async register(email: string, password: string): Promise<void> {
+		let user = await this.users.find({ email });
 
 		if (!user) {
 			user = await this.users.create({
@@ -32,88 +34,100 @@ export class Auth {
 			});
 		} else if (!user.confirmed) {
 			user = await this.users.update(
-				{ email },
+				{ id: user.id },
 				{ password: await this.strings.hash(password) },
 			);
 		} else {
 			throw new Exception(
 				"Вы не можете использовать данный адрес эл.почты",
-				"Unauthorized",
+				"Conflict",
 			);
 		}
 
-		await this.sendOtp(user);
+		await this.sendCode(CodePurpose.Authenticate, user);
 	}
 
-	async login(email: User["email"], password: User["password"]): Promise<User> {
-		const user = await this.users.findWhere({ email });
+	async authenticate(
+		email: User["email"],
+		password: User["password"],
+	): Promise<User> {
+		const user = await this.users.find({ email });
 
 		if (!user || !(await this.strings.verifyHash(password, user.password))) {
 			throw new Exception("Неверный адрес эл.почты или пароль", "Unauthorized");
 		}
 		if (!user.confirmed) {
-			await this.sendOtp(user);
-			throw new Exception("Необходимо подтверждение эл.почты", "Unauthorized");
+			await this.sendCode(CodePurpose.Authenticate, user);
+			throw new Exception("Требуется подтверждение эл.почты", "Forbidden");
 		}
 
 		return user;
 	}
 
-	async sendOtp(emailOrUser: User["email"] | User): Promise<void> {
-		let user: User;
-
-		if (typeof emailOrUser === "string") {
-			const existsUser = await this.users.findWhere({ email: emailOrUser });
-
-			if (!existsUser) {
-				return;
-			}
-
-			user = existsUser;
-		} else {
-			user = emailOrUser;
-		}
-
-		const otp = await this.strings.random(3);
-
-		await this.cache.set(
-			`otp:user_id:${user.id}`,
-			otp,
-			+this.config.require("OTP_TTL_SEC"),
-		);
-		await this.notifier.notify(
-			user.email,
-			await this.assets.get("notifs/otp", { otp }),
-		);
-	}
-
-	async verifyOtp(otp: string, email: User["email"]): Promise<User> {
-		const user = await this.users.findWhere({ email });
-		const cachedOtp =
-			user && (await this.cache.deduct<string>(`otp:user_id:${user.id}`));
-
-		if (!user || !cachedOtp || !this.strings.compare(cachedOtp, otp)) {
-			throw new Exception("Неверный или просроченный код", "Unauthorized");
-		}
-		if (!user.confirmed) {
-			return this.users.update({ email }, { confirmed: true });
-		}
-
-		return user;
-	}
-
-	async changePassword(
-		otp: string,
-		email: User["email"],
-		newPassword: User["password"],
-	): Promise<void> {
-		const user = await this.verifyOtp(email, otp);
+	async initiateCodeAuthenticate(email: string): Promise<void> {
+		const user = await this.users.find({ email });
 
 		if (user) {
-			this.users.update(
-				{ email },
-				{ password: await this.strings.hash(newPassword) },
+			await this.sendCode(CodePurpose.Authenticate, user);
+		}
+	}
+
+	async completeCodeAuthenticate(code: string, email: string): Promise<User> {
+		return await this.verifyCode(CodePurpose.Authenticate, code, email);
+	}
+
+	async initiateReset(email: string): Promise<void> {
+		const user = await this.users.find({ email });
+
+		if (user) {
+			await this.sendCode(CodePurpose.Reset, user);
+		}
+	}
+
+	async completeReset(
+		code: string,
+		email: string,
+		newPassword: string,
+	): Promise<void> {
+		const user = await this.verifyCode(CodePurpose.Reset, code, email);
+
+		await this.users.update(
+			{ id: user.id },
+			{ password: await this.strings.hash(newPassword) },
+		);
+	}
+
+	private async sendCode(purpose: CodePurpose, user: User): Promise<void> {
+		const code = await this.strings.random(3);
+		const lifetime = this.config.require("AUTH_LIFETIME");
+
+		await this.cache.set(`auth:${purpose}:${user.id}`, code, lifetime);
+		await this.notifier.sendPasswordReset(user.email, {
+			code,
+			ttlMin: this.time.toMin(lifetime),
+		});
+	}
+
+	private async verifyCode(
+		purpose: CodePurpose,
+		code: string,
+		email: string,
+	): Promise<User> {
+		const user = await this.users.find({ email });
+		const cachedCode =
+			user && (await this.cache.consume(`auth:${purpose}:${user.id}`));
+
+		if (!cachedCode || !this.strings.compare(cachedCode, code.trim())) {
+			throw new Exception(
+				"Неверный или просроченный код",
+				"Unprocessable Content",
 			);
 		}
+
+		if (!user.confirmed) {
+			return this.users.update({ id: user.id }, { confirmed: true });
+		}
+
+		return user;
 	}
 }

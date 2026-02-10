@@ -1,5 +1,7 @@
-import { Config } from "@/facades/config";
-import { Sessions } from "@/facades/sessions";
+import { Config } from "@/adapters/config";
+import { Sessions } from "@/adapters/sessions";
+import { Exception } from "@/general/exception";
+import { Time } from "@/utils/time";
 import { Elysia, t } from "elysia";
 import { container } from "tsyringe";
 
@@ -7,27 +9,38 @@ export const session = new Elysia()
 	.model({
 		sessionUser: t.Object({ id: t.String() }, { additionalProperties: true }),
 	})
-	.decorate("$sessions", container.resolve(Sessions))
+
+	.decorate("$time", container.resolve(Time))
 	.decorate("$config", container.resolve(Config))
+	.decorate("$sessions", container.resolve(Sessions))
+
 	.macro("initializeSession", {
 		cookie: t.Cookie({ sessionId: t.Optional(t.String()) }),
 		response: "sessionUser",
-		async afterHandle({ $sessions, $config, request, cookie, responseValue }) {
+		async afterHandle({
+			$time,
+			$config,
+			$sessions,
+			request,
+			cookie,
+			responseValue,
+		}) {
 			const sessionId = await $sessions.initialize({
-				userAgent: request.headers.get("user-agent"),
 				userId: responseValue.id,
+				agent: request.headers.get("user-agent") || "null",
 			});
 
 			cookie.sessionId.set({
 				value: sessionId,
 				httpOnly: true,
 				sameSite: "strict",
-				maxAge: $config.require("SESSION_TTL_SEC"),
+				maxAge: $time.toSec($config.require("SESSION_LIFETIME")),
 				secrets: $config.require("SESSION_SECRET"),
 			});
 		},
 	})
-	.macro("provideSession", {
+
+	.macro("withSession", {
 		cookie: t.Cookie({
 			sessionId: t.Intersect([
 				t.String({ minLength: 1, error: "Сессия не предоставлена" }),
@@ -36,6 +49,35 @@ export const session = new Elysia()
 			]),
 		}),
 		async resolve({ $sessions, cookie }) {
-			return { session: await $sessions.get(cookie.sessionId.value) };
+			const session = await $sessions.find(cookie.sessionId.value);
+
+			if (session) {
+				return { session };
+			}
+
+			throw new Exception("Доступ запрещен", "Forbidden");
+		},
+	})
+
+	.macro("withSessions", {
+		withSession: true,
+		async resolve({ $sessions, session }) {
+			return {
+				sessions: await $sessions.findAll(session.userId),
+			};
+		},
+	})
+
+	.macro("withLogout", {
+		withSessions: true,
+		async afterHandle({ $sessions, session }) {
+			await $sessions.destroy(session.sessionId);
+		},
+	})
+
+	.macro("withFullLogout", {
+		withSessions: true,
+		async afterHandle({ $sessions, session }) {
+			await $sessions.destroyAll(session.userId);
 		},
 	});
