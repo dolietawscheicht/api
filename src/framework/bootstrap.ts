@@ -1,7 +1,7 @@
-import { Config } from "@/adapters/config";
 import { Exception } from "@/general/exception";
 import { authController } from "@/modules/auth/controller";
 import { usersController } from "@/modules/users/controller";
+import { Config } from "@/services/config";
 import cors from "@elysiajs/cors";
 import { Elysia, StatusMap } from "elysia";
 import { container } from "tsyringe";

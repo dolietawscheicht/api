@@ -1,5 +1,5 @@
-import { Config } from "@/adapters/config";
-import { Sessions } from "@/adapters/sessions";
+import { Config } from "@/services/config";
+import { Sessions } from "@/services/sessions";
 import { Exception } from "@/general/exception";
 import { Time } from "@/utils/time";
 import { Elysia, t } from "elysia";

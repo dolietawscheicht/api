@@ -1,6 +1,5 @@
-import { Cache } from "@/adapters/cache";
-import { Config } from "@/adapters/config";
-import { Exception } from "@/general/exception";
+import { Cache } from "@/services/cache";
+import { Config } from "@/services/config";
 import type { User } from "@/repos/users";
 import { Strings } from "@/utils/strings";
 import { inject, injectable } from "tsyringe";
@@ -25,7 +24,7 @@ export class Sessions {
 	): Promise<string> {
 		const sessionId = await this.strings.random(16);
 
-		await this.cache.setHash(
+		await this.cache.setMap(
 			`session:${sessionId}`,
 			{
 				sessionId,
@@ -40,7 +39,7 @@ export class Sessions {
 	}
 
 	async find(sessionId: string): Promise<Session | null> {
-		return await this.cache.getHash<Session>(`session:${sessionId}`);
+		return await this.cache.getMap<Session>(`session:${sessionId}`);
 	}
 
 	async findAll(userId: User["id"]): Promise<Session[]> {
@@ -48,7 +47,7 @@ export class Sessions {
 		const sessions: Session[] = [];
 
 		for await (const id of sessionIds) {
-			const session = await this.cache.getHash<Session>(`session:${id}`);
+			const session = await this.cache.getMap<Session>(`session:${id}`);
 
 			if (session) {
 				sessions.push(session);

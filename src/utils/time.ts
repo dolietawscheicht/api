@@ -8,9 +8,7 @@ export type Duration = string & StringValue;
 export class Time {
 	readonly durationSchema = v.pipe(
 		v.string(),
-		v.check(
-			(input: any) => isNaN(parseInt(input)) && !isFinite(this.toMs(input)),
-		),
+		v.check((input: any) => isNaN(Number(input)) && !isNaN(this.toMs(input))),
 	) as v.BaseSchema<unknown, Duration, v.BaseIssue<Duration>>;
 
 	toMs(duration: Duration): number {

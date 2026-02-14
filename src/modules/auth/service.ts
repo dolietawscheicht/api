@@ -1,11 +1,11 @@
-import { Cache } from "@/adapters/cache";
-import { Config } from "@/adapters/config";
-import { Notifier } from "@/adapters/notifier";
-import { Exception } from "@/general/exception";
+import { Cache } from "@/services/cache";
+import { Config } from "@/services/config";
+import { Notifier } from "@/services/notifier";
 import { type User, Users } from "@/repos/users";
 import { Strings } from "@/utils/strings";
 import { Time } from "@/utils/time";
 import { inject, singleton } from "tsyringe";
+import { exceptions } from "./exceptions";
 
 enum CodePurpose {
 	Authenticate = "Authenticate",
@@ -38,10 +38,7 @@ export class Auth {
 				{ password: await this.strings.hash(password) },
 			);
 		} else {
-			throw new Exception(
-				"Вы не можете использовать данный адрес эл.почты",
-				"Conflict",
-			);
+			throw new exceptions.UnavailableEmail();
 		}
 
 		await this.sendCode(CodePurpose.Authenticate, user);
@@ -54,11 +51,11 @@ export class Auth {
 		const user = await this.users.find({ email });
 
 		if (!user || !(await this.strings.verifyHash(password, user.password))) {
-			throw new Exception("Неверный адрес эл.почты или пароль", "Unauthorized");
+			throw new exceptions.InvalidCredentials();
 		}
 		if (!user.confirmed) {
 			await this.sendCode(CodePurpose.Authenticate, user);
-			throw new Exception("Требуется подтверждение эл.почты", "Forbidden");
+			throw new exceptions.ConfirmationReqired();
 		}
 
 		return user;
@@ -102,10 +99,24 @@ export class Auth {
 		const lifetime = this.config.require("AUTH_LIFETIME");
 
 		await this.cache.set(`auth:${purpose}:${user.id}`, code, lifetime);
-		await this.notifier.sendPasswordReset(user.email, {
-			code,
-			ttlMin: this.time.toMin(lifetime),
-		});
+
+		switch (purpose) {
+			case CodePurpose.Authenticate: {
+				await this.notifier.sendEmailConfirmation(user.email, {
+					code,
+					ttlMin: this.time.toMin(lifetime),
+				});
+				break;
+			}
+
+			case CodePurpose.Reset: {
+				await this.notifier.sendPasswordReset(user.email, {
+					code,
+					ttlMin: this.time.toMin(lifetime),
+				});
+				break;
+			}
+		}
 	}
 
 	private async verifyCode(
@@ -118,10 +129,7 @@ export class Auth {
 			user && (await this.cache.consume(`auth:${purpose}:${user.id}`));
 
 		if (!cachedCode || !this.strings.compare(cachedCode, code.trim())) {
-			throw new Exception(
-				"Неверный или просроченный код",
-				"Unprocessable Content",
-			);
+			throw new exceptions.InvalidOrExpiredCode();
 		}
 
 		if (!user.confirmed) {

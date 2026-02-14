@@ -1,4 +1,4 @@
-import { Config } from "@/adapters/config";
+import { Config } from "@/services/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { container } from "tsyringe";
 import { PrismaClient } from "./generated/client";

@@ -1,4 +1,4 @@
-import { Config } from "@/adapters/config";
+import { Config } from "@/services/config";
 import { Time, type Duration } from "@/utils/time";
 import { inject, singleton } from "tsyringe";
 
@@ -29,7 +29,7 @@ export class Cache {
 		await this.cache.del(...keys);
 	}
 
-	async setHash(
+	async setMap(
 		key: string,
 		value: Record<string, string>,
 		duration: Duration,
@@ -38,7 +38,7 @@ export class Cache {
 		await this.cache.expire(key, this.time.toSec(duration));
 	}
 
-	async getHash<Value extends Record<any, any>>(
+	async getMap<Value extends Record<any, any>>(
 		key: string,
 	): Promise<Value | null> {
 		const value = await this.cache.hgetall(key);
